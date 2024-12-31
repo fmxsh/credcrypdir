@@ -1,0 +1,90 @@
+#!/bin/bash
+
+# Function to show usage
+usage() {
+	echo "Usage: $0 [-d|-e] <credfile> <cred keys> <source> <target>"
+	echo "  -d              Decrypt and decompress a file using crypdir"
+	echo "  -e              Encrypt and compress a directory using crypdir"
+	echo "  <credfile>      File containing credentials"
+	echo "  <cred keys>     Keys to retrieve (KEY and ITER)"
+	echo "  <source>        Source file (encrypted file for -d, directory for -e)"
+	echo "  <target>        Target directory (for -d) or output file (for -e)"
+	exit 1
+}
+
+# Parse command-line options
+MODE=""
+while [[ "$1" =~ ^- ]]; do
+	case $1 in
+	-d)
+		MODE="decrypt"
+		;;
+	-e)
+		MODE="encrypt"
+		;;
+	*)
+		usage
+		;;
+	esac
+	shift
+done
+
+# Ensure mode is specified
+if [ -z "$MODE" ]; then
+	usage
+fi
+
+# Ensure proper number of arguments
+if [ "$#" -ne 4 ]; then
+	usage
+fi
+
+CRED_FILE="$1"
+KEYS="$2"
+SOURCE="$3"
+TARGET="$4"
+
+# Prompt for the password if not piped
+if [ -p /dev/stdin ]; then
+	read -s PASSWORD
+else
+	echo -n "Enter password: "
+	read -s PASSWORD
+	echo
+fi
+
+# Get key and iteration count using cred command
+CRED_OUTPUT=$(printf "%s" "$PASSWORD" | cred -e "$KEYS" "$CRED_FILE")
+if (($? != 0)); then
+	echo "Failed to decrypt $CRED_FILE with the cred command."
+	exit 1
+fi
+KEY=$(echo "$CRED_OUTPUT" | sed -n '1p')
+ITERATIONS=$(echo "$CRED_OUTPUT" | sed -n '2p')
+
+# Check if the key and iterations were retrieved
+if [ -z "$KEY" ] || [ -z "$ITERATIONS" ]; then
+	echo "Failed to retrieve key or iterations from the cred command."
+	exit 1
+fi
+
+# Perform the requested operation
+if [ "$MODE" == "decrypt" ]; then
+	# Decrypt and decompress the file
+	echo -n "$KEY" | crypdir -d -i "$ITERATIONS" "$SOURCE" "$TARGET"
+	if (($? == 0)); then
+		echo "Successfully decrypted and decompressed into: $TARGET"
+	else
+		echo "Decryption failed."
+		exit 1
+	fi
+elif [ "$MODE" == "encrypt" ]; then
+	# Encrypt and compress the directory
+	echo -n "$KEY" | crypdir -e -i "$ITERATIONS" "$SOURCE" "$TARGET"
+	if (($? == 0)); then
+		echo "Successfully encrypted and compressed to: $TARGET"
+	else
+		echo "Encryption failed."
+		exit 1
+	fi
+fi
