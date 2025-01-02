@@ -1,4 +1,4 @@
-# credcrypdir - Encrypt and Decriypt Directories
+# credcrypdir - Encrypt and Decrypt Directories
 
 Is a wrapper uniting the `crypdir` and `cred` commands to encrypt and decrypt directories.
 
